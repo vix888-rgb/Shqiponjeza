@@ -1,6 +1,6 @@
 /* Service worker: punon pa internet */
-const CACHE = "shqiponjeza-v3";
-const FILES = ["./", "./index.html", "./styles.css", "./app.js", "./content.js", "./mascot.js", "./manifest.json", "./IMG_4544.png", "./IMG_4545.png", "./IMG_4546.png", "./IMG_4547.png"];
+const CACHE = "shqiponjeza-v4";
+const FILES = ["./", "./index.html", "./styles.css", "./app.js", "./content.js", "./content2-5.js", "./content6-9.js", "./mascot.js", "./manifest.json", "./IMG_4544.png", "./IMG_4545.png", "./IMG_4546.png", "./IMG_4547.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {

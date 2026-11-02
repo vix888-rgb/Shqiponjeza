@@ -11,18 +11,36 @@
   const fresh = () => ({
     profile: null, progress: {}, coins: 0, xp: 0, medals: {}, streak: { count: 0, last: "" },
     hints: 0, feeds: 0, nest: { food: 70, joy: 70, updated: Date.now(), items: [], outfit: "", owned: [] },
-    stats: {}, settings: { sound: true, voice: true },
+    stats: {}, settings: { sound: true, voice: true }, grade: null, v: 2,
   });
   let S;
-  try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { S = fresh(); }
+  let raw = {};
+  try { raw = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { raw = {}; }
+  S = Object.assign(fresh(), raw);
+  /* Migrimi: progresi i vjetër (vetëm klasa 1) kalon te çelësat "1-zona" pa humbur asgjë */
+  if (!raw.v || raw.v < 2) {
+    const mv = (o) => { const n = {}; Object.keys(o || {}).forEach((k) => { n[/^\d-/.test(k) ? k : "1-" + k] = o[k]; }); return n; };
+    S.progress = mv(S.progress); S.stats = mv(S.stats);
+    if (S.profile && !S.grade) S.grade = 1;
+    S.v = 2;
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ruajtja dështoi */ }
+  }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ruajtja dështoi */ } };
 
-  const W = window.WORLD;
+  const GR = window.GRADES;
+  const GRADE_NUMS = Object.keys(GR).map(Number).sort((a, b) => a - b);
+  const curGrade = () => (GR[S.grade] ? S.grade : 1);
+  let W = GR[curGrade()];
+  const setGrade = (g) => { S.grade = g; W = GR[curGrade()]; save(); };
+  const pk = (aid, g = curGrade()) => `${g}-${aid}`;
   const areaById = (id) => W.areas.find((a) => a.id === id);
-  const lp = (aid, i) => (S.progress[aid] && S.progress[aid][i]) || null;
-  const areaStars = (aid) => Object.values(S.progress[aid] || {}).reduce((s, p) => s + (p.stars || 0), 0);
-  const totalStars = () => W.areas.reduce((s, a) => s + areaStars(a.id), 0);
-  const levelsDone = (aid) => Object.values(S.progress[aid] || {}).filter((p) => p.stars > 0).length;
+  const lp = (aid, i) => (S.progress[pk(aid)] && S.progress[pk(aid)][i]) || null;
+  const areaStars = (aid, g) => Object.values(S.progress[pk(aid, g)] || {}).reduce((s, p) => s + (p.stars || 0), 0);
+  const levelsDone = (aid, g) => Object.values(S.progress[pk(aid, g)] || {}).filter((p) => p.stars > 0).length;
+  const totalStars = () => Object.values(S.progress).reduce((s, lv) => s + Object.values(lv || {}).reduce((t, p) => t + (p.stars || 0), 0), 0);
+  const gradeStars = (g) => GR[g].areas.reduce((s, a) => s + areaStars(a.id, g), 0);
+  const gradeDone = (g) => GR[g].areas.reduce((s, a) => s + levelsDone(a.id, g), 0);
+  const zonesPlayed = () => Object.values(S.progress).filter((lv) => Object.values(lv || {}).some((p) => p.stars > 0)).length;
   const isUnlocked = (aid, i) => {
     if (i === 0) return true;
     if (i === 10) return [...Array(10).keys()].every((k) => lp(aid, k)) && areaStars(aid) >= 15;
@@ -42,7 +60,7 @@
     { id: "rrufe", icon: "⚡", name: "Rrufeja", cond: "Përfundo një nivel nën 60 sekonda me të paktën 2 yje" },
     { id: "dorezo", icon: "💪", name: "Mos u Dorëzo", cond: "Kthehu në një nivel dhe merr më shumë yje se më parë" },
     { id: "roja", icon: "🛡️", name: "Mposhtësi i Rojës", cond: "Fito një Sfidë të Rojës" },
-    { id: "eksplorues", icon: "🧭", name: "Eksploruesi", cond: "Përfundo një nivel në secilën nga 3 zonat" },
+    { id: "eksplorues", icon: "🧭", name: "Eksploruesi", cond: "Përfundo një nivel në 3 lëndë të ndryshme" },
     { id: "yje30", icon: "🌟", name: "Mbledhës Yjesh", cond: "Mblidh 30 yje" },
     { id: "zjarri3", icon: "🔥", name: "Zjarri 3", cond: "Mëso 3 ditë radhazi" },
     { id: "kurioz", icon: "💡", name: "Kurioz", cond: "Përdor ndihmën 5 herë" },
@@ -52,7 +70,7 @@
   const checkGlobalMedals = () => {
     const got = [];
     const push = (m) => m && got.push(m);
-    if (W.areas.every((a) => levelsDone(a.id) > 0)) push(award("eksplorues"));
+    if (zonesPlayed() >= 3) push(award("eksplorues"));
     if (totalStars() >= 30) push(award("yje30"));
     if (S.streak.count >= 3) push(award("zjarri3"));
     if (S.hints >= 5) push(award("kurioz"));
@@ -107,7 +125,8 @@
 
   function render() {
     if (!S.profile) return renderOnboard();
-    ({ home: renderHome, area: renderArea, game: renderGame, result: renderResult, nest: renderNest, medals: renderMedals, profile: renderProfile, parent: renderParent })[screen]();
+    if (!GR[S.grade] && screen !== "grade") { screen = "grade"; ctx = { first: true }; }
+    ({ home: renderHome, grade: renderGrade, area: renderArea, game: renderGame, result: renderResult, nest: renderNest, medals: renderMedals, profile: renderProfile, parent: renderParent })[screen]();
   }
 
   const AVATARS = ["🦊", "🐻", "🦉", "🐢", "🐰", "🐼", "🐱", "🐶", "🦁", "🐸"];
@@ -119,13 +138,18 @@
       <input id="nm" maxlength="16" placeholder="Emri yt" autocomplete="off" aria-label="Emri yt">
       <p class="lbl">Zgjidh kafshën tënde:</p>
       <div class="avatars">${AVATARS.map((a, i) => `<button class="avb${i === 0 ? " on" : ""}" data-av="${a}">${a}</button>`).join("")}</div>
+      <p class="lbl">Në cilën klasë je?</p>
+      ${gradeButtons(null)}
       <button class="btn primary big" id="start">Fillojmë! 🚀</button>
     </div>`;
     $app.querySelectorAll(".avb").forEach((b) => b.onclick = () => { sfx.tap(); av = b.dataset.av; $app.querySelectorAll(".avb").forEach((x) => x.classList.toggle("on", x === b)); });
+    let gr = null;
+    $app.querySelectorAll(".grb").forEach((b) => b.onclick = () => { sfx.tap(); gr = +b.dataset.g; $app.querySelectorAll(".grb").forEach((x) => x.classList.toggle("on", x === b)); });
     $app.querySelector("#start").onclick = () => {
       const name = $app.querySelector("#nm").value.trim();
       if (!name) { $app.querySelector("#nm").focus(); toast("Shkruaj emrin tënd 🙂"); return; }
-      S.profile = { name, avatar: av }; save(); sfx.win(); go("home");
+      if (!gr) { toast("Zgjidh klasën tënde 🙂"); return; }
+      S.profile = { name, avatar: av }; setGrade(gr); sfx.win(); go("home");
     };
   }
 
@@ -133,12 +157,29 @@
     const hi = ["Sot mësojmë diçka të re!", "Gati për aventurë?", "Çdo yll të çon më lart!", "Le të fluturojmë bashkë!"][new Date().getDate() % 4];
     $app.innerHTML = `${header()}<main class="screen home">
       <div class="greet"><div class="mascot-sm">${chickSVG({ outfit: S.nest.outfit })}</div><div class="bubble">Tungjatjeta, <b>${esc(S.profile.name)}</b>! ${hi}</div></div>
-      <h2 class="world">🌷 ${W.name} <small>${W.grade}</small></h2>
-      <div class="islands">${W.areas.map((a) => { const st = areaStars(a.id), d = levelsDone(a.id); return `<button class="island" data-area="${a.id}" style="--c:${a.color}">
+      <div class="world-row"><h2 class="world">${W.emoji} ${W.name}</h2><button class="grade-btn" id="grade" aria-label="Ndrysho klasën">Klasa ${curGrade()} ▾</button></div>
+      <div class="islands ${W.areas.length > 5 ? "many" : ""}">${W.areas.map((a) => { const st = areaStars(a.id), d = levelsDone(a.id); return `<button class="island" data-area="${a.id}" style="--c:${a.color}">
         <span class="i-emoji">${a.emoji}</span><span class="i-name">${a.name}</span><span class="i-place">${a.place}</span>
         <span class="bar"><i style="width:${Math.round((d / 11) * 100)}%"></i></span><span class="i-stars">⭐ ${st}/33 · ${d}/11 nivele</span></button>`; }).join("")}</div>
     </main>${nav("home")}`;
     $app.querySelectorAll(".island").forEach((b) => b.onclick = () => { sfx.tap(); go("area", { aid: b.dataset.area }); });
+    $app.querySelector("#grade").onclick = () => { sfx.tap(); go("grade"); };
+  }
+
+  /* ---------- Zgjedhja e klasës ---------- */
+  function gradeButtons(sel) {
+    return `<div class="grades">${GRADE_NUMS.map((g) => `<button class="grb${g === sel ? " on" : ""}" data-g="${g}"><b>${g}</b><span>${GR[g].emoji}</span></button>`).join("")}</div>`;
+  }
+  function renderGrade() {
+    const first = !!ctx.first;
+    $app.innerHTML = `${S.profile ? header() : ""}<main class="screen grade">
+      <div class="area-head">${first ? "" : `<button class="back" data-go="home" aria-label="Kthehu">←</button>`}<h2>🎒 Zgjidh klasën</h2></div>
+      <p class="soft">Çdo klasë është një botë më vete me lëndët e saj. Yjet dhe nivelet ruhen veçmas për secilën klasë.</p>
+      <div class="grade-list">${GRADE_NUMS.map((g) => { const G = GR[g], st = gradeStars(g), d = gradeDone(g), max = G.areas.length * 11; return `<button class="grade-card${g === S.grade ? " on" : ""}" data-g="${g}">
+        <span class="gc-num">${g}</span><span class="gc-main"><b>Klasa ${g}: ${G.emoji} ${G.name}</b><small>${G.areas.map((a) => a.emoji).join(" ")} · ${G.areas.length} lëndë</small>
+        <span class="bar"><i style="width:${Math.round((d / max) * 100)}%"></i></span><small>⭐ ${st} · ${d}/${max} nivele</small></span></button>`; }).join("")}</div>
+    </main>${S.profile ? nav("home") : ""}`;
+    $app.querySelectorAll(".grade-card").forEach((b) => b.onclick = () => { sfx.tap(); setGrade(+b.dataset.g); toast(`Klasa ${b.dataset.g} ✔`); go("home"); });
   }
 
   function renderArea() {
@@ -201,14 +242,15 @@
   function finishLevel() {
     const { aid, i, mistakes } = ctx, secs = Math.round((Date.now() - ctx.start) / 1000);
     const stars = mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1;
-    S.progress[aid] = S.progress[aid] || {};
-    const prev = S.progress[aid][i];
+    const key = pk(aid);
+    S.progress[key] = S.progress[key] || {};
+    const prev = S.progress[key][i];
     const first = !prev;
     const p = prev || { stars: 0, plays: 0 };
     const improved = prev && stars > prev.stars;
     p.stars = Math.max(p.stars, stars); p.plays++; p.last = today();
-    S.progress[aid][i] = p;
-    const st = S.stats[aid] || (S.stats[aid] = { correct: 0, total: 0, secs: 0 });
+    S.progress[key][i] = p;
+    const st = S.stats[key] || (S.stats[key] = { correct: 0, total: 0, secs: 0 });
     st.correct += ctx.firstTry; st.total += ctx.qs.length; st.secs += secs;
     let coins = stars * 3 + (first ? 10 : 0) + (i === 10 ? 20 : 0);
     const xp = 10 + 5 * stars + (i === 10 ? 30 : 0);
@@ -305,6 +347,7 @@
       <div class="prof-card"><span class="av-big">${S.profile.avatar}</span><div><h2>${esc(S.profile.name)}</h2><small>Niveli ${pl.L}: ${titleFor(pl.L)} · ${S.xp} XP</small></div></div>
       <label class="lbl" for="nm">Emri</label><input id="nm" maxlength="16" value="${esc(S.profile.name)}">
       <p class="lbl">Kafsha</p><div class="avatars">${AVATARS.map((a) => `<button class="avb${a === S.profile.avatar ? " on" : ""}" data-av="${a}">${a}</button>`).join("")}</div>
+      <p class="lbl">Klasa</p>${gradeButtons(curGrade())}
       <div class="settings">
         <label><input type="checkbox" id="snd" ${S.settings.sound ? "checked" : ""}> 🔔 Tingujt</label>
         <label><input type="checkbox" id="vc" ${S.settings.voice ? "checked" : ""} ${sqVoice ? "" : "disabled"}> 🔊 Leximi me zë i pyetjeve</label>
@@ -316,6 +359,7 @@
     const nm = $app.querySelector("#nm");
     nm.onchange = () => { const v = nm.value.trim(); if (v) { S.profile.name = v; save(); toast("Emri u ruajt ✔"); } };
     $app.querySelectorAll(".avb").forEach((b) => b.onclick = () => { S.profile.avatar = b.dataset.av; save(); sfx.tap(); renderProfile(); });
+    $app.querySelectorAll(".grb").forEach((b) => b.onclick = () => { setGrade(+b.dataset.g); sfx.tap(); toast(`Klasa ${b.dataset.g} ✔`); renderProfile(); });
     $app.querySelector("#snd").onchange = (e) => { S.settings.sound = e.target.checked; save(); };
     $app.querySelector("#vc").onchange = (e) => { S.settings.voice = e.target.checked; save(); };
     $app.querySelector("#parent").onclick = () => go("parent", { gate: true });
@@ -330,16 +374,21 @@
       $app.querySelector("#ok").onclick = () => { if (+$app.querySelector("#gate").value === a * b) go("parent", {}); else toast("Përgjigje e gabuar."); };
       return;
     }
-    const rows = W.areas.map((ar) => {
-      const st = S.stats[ar.id] || { correct: 0, total: 0, secs: 0 };
+    const pg = GR[ctx.pg] ? ctx.pg : curGrade();
+    const rowsFor = (g) => GR[g].areas.map((ar) => {
+      const st = S.stats[pk(ar.id, g)] || { correct: 0, total: 0, secs: 0 };
       const acc = st.total ? Math.round((st.correct / st.total) * 100) : null;
-      const played = Object.entries(S.progress[ar.id] || {});
+      const played = Object.entries(S.progress[pk(ar.id, g)] || {});
       const weak = played.filter(([, p]) => p.stars < 3).sort((x, y) => x[1].stars - y[1].stars)[0];
       const weakName = weak ? (+weak[0] === 10 ? "Sfida e Rojës" : ar.levels[+weak[0]].t) : "—";
-      return { ar, done: levelsDone(ar.id), stars: areaStars(ar.id), acc, mins: st.secs < 60 ? st.secs + " s" : Math.round(st.secs / 60) + " min", weakName };
+      return { ar, done: levelsDone(ar.id, g), stars: areaStars(ar.id, g), acc, mins: st.secs < 60 ? st.secs + " s" : Math.round(st.secs / 60) + " min", weakName };
     });
-    const report = `Raporti i progresit: ${S.profile.name} (${today()})\n` + rows.map((r) => `${r.ar.name}: ${r.done}/11 nivele, ${r.stars}/33 yje, saktësia ${r.acc === null ? "—" : r.acc + "%"}, ${r.mins}, për përsëritje: ${r.weakName}`).join("\n") + `\nSeria: ${S.streak.count} ditë · Medalje: ${Object.keys(S.medals).length}/${MEDALS.length} · Niveli: ${playerLevel().L}`;
+    const rows = rowsFor(pg);
+    const active = GRADE_NUMS.filter((g) => gradeDone(g) > 0);
+    const report = `Raporti i progresit: ${S.profile.name} (${today()})\n` + (active.length ? active : [pg]).map((g) => `\nKLASA ${g}: ${GR[g].name}\n` + rowsFor(g).filter((r) => r.done > 0 || g === pg).map((r) => `${r.ar.name}: ${r.done}/11 nivele, ${r.stars}/33 yje, saktësia ${r.acc === null ? "—" : r.acc + "%"}, ${r.mins}, për përsëritje: ${r.weakName}`).join("\n")).join("\n") + `\n\nSeria: ${S.streak.count} ditë · Medalje: ${Object.keys(S.medals).length}/${MEDALS.length} · Niveli: ${playerLevel().L}`;
     $app.innerHTML = `<main class="screen parent"><div class="area-head"><button class="back" data-go="profile">←</button><h2>Progresi i ${esc(S.profile.name)}</h2></div>
+      <p class="lbl">Klasa ${pg}: ${GR[pg].emoji} ${GR[pg].name}${pg === curGrade() ? " (klasa aktuale)" : ""}</p>
+      <div class="pgrades">${GRADE_NUMS.map((g) => { const d = gradeDone(g); return `<button class="pgb${g === pg ? " on" : ""}${d ? " has" : ""}" data-pg="${g}"><b>${g}</b><small>${d ? "⭐ " + gradeStars(g) : "—"}</small></button>`; }).join("")}</div>
       <div class="ptable">${rows.map((r) => `<div class="prow" style="--c:${r.ar.color}"><b>${r.ar.emoji} ${r.ar.name}</b>
         <div class="bar"><i style="width:${Math.round((r.done / 11) * 100)}%"></i></div>
         <div class="pgrid"><span>Nivele<b>${r.done}/11</b></span><span>Yje<b>${r.stars}/33</b></span><span>Saktësia<b>${r.acc === null ? "—" : r.acc + "%"}</b></span><span>Koha<b>${r.mins}</b></span></div>
@@ -347,13 +396,15 @@
       <p class="soft">Saktësia = pyetjet e zgjidhura në provën e parë. Seria: ${S.streak.count} ditë · Medalje: ${Object.keys(S.medals).length}/${MEDALS.length}</p>
       <button class="btn primary" id="copy">📋 Kopjo raportin</button>
       <button class="btn danger" id="reset">Fshi gjithë progresin</button></main>`;
+    $app.querySelectorAll(".pgb").forEach((b) => b.onclick = () => { sfx.tap(); go("parent", { pg: +b.dataset.pg }); });
     $app.querySelector("#copy").onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(report) : Promise.reject()).then(() => toast("Raporti u kopjua ✔"), () => { prompt("Kopjo raportin:", report); }); };
-    $app.querySelector("#reset").onclick = () => { if (confirm("A jeni të sigurt? I gjithë progresi do të fshihet.")) { localStorage.removeItem(KEY); S = fresh(); go("home"); } };
+    $app.querySelector("#reset").onclick = () => { if (confirm("A jeni të sigurt? I gjithë progresi do të fshihet.")) { localStorage.removeItem(KEY); S = fresh(); W = GR[1]; go("home"); } };
   }
 
   /* navigimi i përbashkët */
   $app.addEventListener("click", (e) => { const g = e.target.closest("[data-go]"); if (g) { sfx.tap(); go(g.dataset.go); } });
   render();
+  if (/[?&]test\b/.test(location.search)) window.__shq = { get ctx() { return ctx; }, get S() { return S; }, get screen() { return screen; }, go };
 
   if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

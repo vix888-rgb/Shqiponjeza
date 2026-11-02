@@ -1,7 +1,7 @@
 {
   "name": "Shqiponjëza: mëso duke luajtur",
   "short_name": "Shqiponjëza",
-  "description": "Matematikë, gjuhë shqipe dhe natyrë për klasën 1, me lojëra, yje dhe medalje.",
+  "description": "Mësim me lojëra për klasat 1–9: matematikë, gjuhë shqipe, anglisht, shkenca, histori, gjeografi dhe TIK, me yje dhe medalje.",
   "lang": "sq",
   "start_url": "./index.html",
   "scope": "./",

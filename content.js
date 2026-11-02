@@ -1,4 +1,4 @@
-/* Përmbajtja e Klasës 1: Matematikë, Gjuhë shqipe, Njeriu dhe natyra */
+/* Ndihmës të përbashkët dhe përmbajtja e Klasës 1: Matematikë, Gjuhë shqipe, Njeriu dhe natyra */
 (function () {
   const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   const shuffle = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -16,6 +16,51 @@
   const bigPic = (e) => `<div class="big-pic">${e}</div>`;
   const repeat = (n, gen) => { const out = []; const seen = new Set(); let g = 0; while (out.length < n && g++ < 200) { const q = gen(); const k = q.q + "|" + q.ans + "|" + (q.pic || ""); if (!seen.has(k)) { seen.add(k); out.push(q); } } return out; };
   const fromBank = (bank, n) => sample(bank, n).map((b) => Object.assign({}, b, { opts: shuffle(b.opts) }));
+  /* pyetje nga tabela [çelës, vlerë]: distraktorët janë vlera të tjera, kurrë e njëjta vlerë */
+  const tableQ = (pairs, qf, n = 6, extra) => repeat(n, () => {
+    const [k, v] = pick(pairs);
+    const others = [...new Set(pairs.map((p) => p[1]).filter((x) => x !== v))];
+    const q = Object.assign({ q: qf(k), ans: v, opts: shuffle([v, ...sample(others, 2)]) }, extra ? extra(k, v) : {});
+    return q;
+  });
+  /* pyetje e kundërt: vlera -> çelësi (vetëm kur çdo çelës ka vlerë të ndryshme) */
+  const tableRev = (pairs, qf, n = 6, extra) => repeat(n, () => {
+    const [k, v] = pick(pairs);
+    const others = pairs.filter((p) => p[1] !== v && p[0] !== k).map((p) => p[0]);
+    return Object.assign({ q: qf(v), ans: k, opts: shuffle([k, ...sample([...new Set(others)], 2)]) }, extra ? extra(k, v) : {});
+  });
+  /* klasifikim: grupet {kategoria: [elemente]} */
+  const classQ = (groups, mode, n = 6, qtxt) => repeat(n, () => {
+    const cats = Object.keys(groups); const c = pick(cats);
+    if (mode === "which") {
+      const item = pick(groups[c]);
+      const others = cats.filter((x) => x !== c).flatMap((x) => groups[x]);
+      return { q: qtxt ? qtxt(c) : `Cila është ${c}?`, ans: item, opts: shuffle([item, ...sample(others, 2)]) };
+    }
+    const item = pick(groups[c]);
+    return { q: qtxt ? qtxt(item) : `Ku bën pjesë: ${item}?`, ans: c, opts: cats.length <= 4 ? shuffle(cats) : shuffle([c, ...sample(cats.filter((x) => x !== c), 3)]) };
+  });
+  /* bankë: [pyetja, saktë, gabim1, gabim2, ...] */
+  const bankQ = (rows, n = 6, hint) => sample(rows, Math.min(n, rows.length)).map((r) => ({ q: r[0], ans: r[1], opts: shuffle(r.slice(1)), hint: hint }));
+  const L = (t, gen) => ({ t, gen });
+  const mix = (levels, n = 8) => () => shuffle(levels.map((l) => l.gen()[0]).filter(Boolean)).slice(0, n);
+  const AREA_STYLE = {
+    mat: ["Matematikë", "Kalaja e Prizrenit", "🏰", "#ff8a3d", "Bufi i Urtë", "🦉"],
+    shq: ["Gjuhë shqipe", "Lugina e Rugovës", "🏞️", "#4c9aff", "Ariu i Rugovës", "🐻"],
+    nat: ["Njeriu dhe natyra", "Malet e Sharrit", "🏔️", "#36b37e", "Rrëqebulli i Sharrit", "🐆"],
+    sho: ["Shoqëria dhe mjedisi", "Ulpiana", "🏛️", "#a368fc", "Dhelpra e Ulpianës", "🦊"],
+    ang: ["Gjuhë angleze", "Ura e Terzive", "🌉", "#ff5d8f", "Kunadhja e Urës", "🦡"],
+    bio: ["Biologji", "Ujëvarat e Mirushës", "💧", "#2bb3a3", "Gjarpri i Mirushës", "🐍"],
+    fiz: ["Fizikë", "Ujëvara e Drinit të Bardhë", "⚡", "#f2b705", "Shqiponja e Drinit", "🦅"],
+    kim: ["Kimi", "Shpella e Gadimes", "🧪", "#7a5af8", "Lakuriqi i Shpellës", "🦇"],
+    his: ["Histori", "Kalaja e Novobërdës", "📜", "#c2410c", "Kalorësi i Kalasë", "🐴"],
+    gjeo: ["Gjeografi", "Maja e Gjeravicës", "🗺️", "#0ea5e9", "Dhia e Malit", "🐐"],
+    tik: ["TIK", "Kulla Dixhitale", "💻", "#475569", "Roboti i Kullës", "🤖"],
+  };
+  const area = (id, levels) => { const [name, place, emoji, color, boss, bossEmoji] = AREA_STYLE[id]; return { id, name, place, emoji, color, boss, bossEmoji, levels, challenge: mix(levels, 8) }; };
+  const fmt = (x) => String(Math.round(x * 1000) / 1000).replace(".", ",");
+  window.QH = { R, shuffle, pick, sample, numOpts, optsWith, many, bigPic, repeat, fromBank, tableQ, tableRev, classQ, bankQ, L, mix, area, fmt };
+  window.GRADES = window.GRADES || {};
 
   const THINGS = ["🍎", "⭐", "🎈", "🐟", "🌸", "🍌", "⚽", "🐥", "🍓", "🚗"];
 
@@ -180,9 +225,8 @@
     return shuffle(qs).slice(0, n);
   };
 
-  window.WORLD = {
-    name: "Bota e Pranverës",
-    grade: "Klasa 1",
+  window.GRADES[1] = {
+    name: "Bota e Pranverës", emoji: "🌷",
     areas: [
       { id: "mat", name: "Matematikë", place: "Kalaja e Prizrenit", emoji: "🏰", color: "#ff8a3d", boss: "Bufi i Urtë", bossEmoji: "🦉", levels: mat, challenge: challenge(mat, 8) },
       { id: "shq", name: "Gjuhë shqipe", place: "Lugina e Rugovës", emoji: "🏞️", color: "#4c9aff", boss: "Ariu i Rugovës", bossEmoji: "🐻", levels: shq, challenge: challenge(shq, 8) },
